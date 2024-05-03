@@ -30,5 +30,18 @@ function flipCoin(address payable _player, uint256 _betAmount) payable public {
 }
 
 function fulfillRandomWords(uint256 requestId, uint256[] memory randomWords) internal override  {
+    address playerAddress = pendingGames[requestId];
+    uint256 betAmount = bets[requestId];
+
+    uint256 randomNumber = randomWords[0] % 2;
+    bool isHead = randomNumber == 0; 
+
+    ditributeRewards(isHead ? playerAddress : address(this), betAmount);
+
+    delete pendingGames[requestId];
+}
+
+function ditributeRewards(address winner, uint256 betAmount) internal {
+    payable(winner).transfer(betAmount * 2);
 }
 } 
