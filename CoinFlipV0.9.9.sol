@@ -28,7 +28,7 @@ contract coinFlip is VRFConsumerBaseV2Plus {
 
     uint256[] public requestIds;
 //    uint256 public lastRequestId;
-    uint256 totalFeesCollected;
+    uint256 public totalFeesCollected;
 
 constructor (uint256 subscriptionId) VRFConsumerBaseV2Plus(0xDA3b641D438362C440Ac5458c57e00a712b66700) payable {
 
@@ -72,8 +72,8 @@ constructor (uint256 subscriptionId) VRFConsumerBaseV2Plus(0xDA3b641D438362C440A
         require(s_requests[_requestId].exists, "request not found");
         s_requests[_requestId].fulfilled = true;
         s_requests[_requestId].randomWords = _randomWords;
-        RequestStatus memory requested = s_requests[_requestId];
-        fulfillGamble(_requestId, requested.betAmount);
+        RequestStatus memory request = s_requests[_requestId];
+        fulfillGamble(_requestId, request.betAmount);
         emit RequestFulfilled(_requestId, _randomWords);
     }
 
@@ -92,8 +92,6 @@ constructor (uint256 subscriptionId) VRFConsumerBaseV2Plus(0xDA3b641D438362C440A
 
         require(msg.value == _amount, "invalid amount");
         require(_amount > 0, "amount should be more than 0");
-        (bool success, ) = payable(address(this)).call{value: msg.value}("");
-        require(success, "transfer failed!!!");
 
         uint256 requestId = COORDINATOR.requestRandomWords(
             VRFV2PlusClient.RandomWordsRequest({
@@ -149,7 +147,6 @@ constructor (uint256 subscriptionId) VRFConsumerBaseV2Plus(0xDA3b641D438362C440A
     payable(msg.sender).transfer(_amount);
 }
 
-/// write a function that uses our random request from vrf and flips a coin
 
 
 
