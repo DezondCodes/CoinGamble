@@ -6,7 +6,7 @@ import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/V
 
 contract coinFlip is VRFConsumerBaseV2Plus {
 
-    event RequestSent(uint256 requestId, uint32 numWords, address requester);
+    event RequestSent(uint256 requestId, uint32 numWords);
     event RequestFulfilled(uint256 requestId, uint256[] randomWords);
     event CoinFlip(address player, string isHead, uint256 amount);
 
@@ -27,7 +27,7 @@ contract coinFlip is VRFConsumerBaseV2Plus {
     uint32 numWords = 1;
 
     uint256[] public requestIds;
-//    uint256 public lastRequestId;
+    uint256 public lastRequestId;
     uint256 public totalFeesCollected;
 
 constructor (uint256 subscriptionId) VRFConsumerBaseV2Plus(0xDA3b641D438362C440Ac5458c57e00a712b66700) payable {
@@ -60,8 +60,8 @@ constructor (uint256 subscriptionId) VRFConsumerBaseV2Plus(0xDA3b641D438362C440A
             betAmount: 0
         });
         requestIds.push(requestId);
-        //lastRequestId = requestId;
-        emit RequestSent(requestId, numWords, msg.sender);
+        lastRequestId = requestId;
+        emit RequestSent(requestId, numWords);
         return requestId;
     }
 
@@ -72,9 +72,8 @@ constructor (uint256 subscriptionId) VRFConsumerBaseV2Plus(0xDA3b641D438362C440A
         require(s_requests[_requestId].exists, "request not found");
         s_requests[_requestId].fulfilled = true;
         s_requests[_requestId].randomWords = _randomWords;
-        RequestStatus memory request = s_requests[_requestId];
-        fulfillGamble(_requestId, request.betAmount);
         emit RequestFulfilled(_requestId, _randomWords);
+        fulfillGamble(_requestId, s_requests[_requestId].betAmount);   
     }
 
     function getRequestStatus(
@@ -88,7 +87,7 @@ constructor (uint256 subscriptionId) VRFConsumerBaseV2Plus(0xDA3b641D438362C440A
 
     function gamble(
         uint256 _amount
-    ) public payable {
+    ) public payable returns (uint256) {
 
         require(msg.value == _amount, "invalid amount");
         require(_amount > 0, "amount should be more than 0");
@@ -112,7 +111,9 @@ constructor (uint256 subscriptionId) VRFConsumerBaseV2Plus(0xDA3b641D438362C440A
             betAmount: _amount
         });
         requestIds.push(requestId);
-        emit RequestSent(requestId, numWords, msg.sender);
+        emit RequestSent(requestId, numWords);
+        return requestId;
+
 
 
 }
