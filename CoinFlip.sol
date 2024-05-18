@@ -1,60 +1,91 @@
-pragma solidity ^0.8.0;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.7;
 
-import "@chainlink/contracts/src/v0.8/vrf/interfaces/VRFCoordinatorV2Interface.sol";
-import "@chainlink/contracts/src/v0.8/vrf/VRFConsumerBaseV2.sol";
+import {IVRFCoordinatorV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/interfaces/IVRFCoordinatorV2Plus.sol";
+import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
+import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 
-contract CoinFlip is VRFConsumerBaseV2 {
+contract coinFlip is VRFConsumerBaseV2Plus {
 
-//ChainLink VRF
-VRFCoordinatorV2Interface COORDINATOR;
-bytes32 KEYHASH;
-uint64 public FEE;
-uint64 SUB;
-uint256 weiPerBnb = 10**18;
+    event BetPlaced(address indexed  player, uint256 betAmount, uint256 requestId);
+    event CoinFlipped(address indexed player, string outcome, uint256 amountWon);
 
-//Game Variables
-mapping (uint256 => address payable ) public pendingGames;
-mapping (uint256 => uint256) public bets;
+    struct Bet {
+        uint256 amount;
+        bool isHead;
+    }
 
-constructor(address payable _coordinator, bytes32 _keyHash, uint64 _sub) VRFConsumerBaseV2(_coordinator) {
-    COORDINATOR = VRFCoordinatorV2Interface(_coordinator);
-    KEYHASH = _keyHash;
-    SUB = _sub;
+    mapping (uint256 => Bet) public bets;
+    mapping (uint256 => address) public requestIdToPlayer;
+
+    IVRFCoordinatorV2Plus COORDINATOR;
+    uint256 s_subscriptionId;
+    bytes32 keyHash = 0x8596b430971ac45bdf6088665b9ad8e8630c9d5049ab54b14dff711bee7c0e26;
+    uint32 callbackGasLimit = 100000;
+    uint16 requestConfirmations = 3;
+    uint32 numWords = 1;
+
+    uint256 public totalFeesCollected;
+
+constructor (uint256 subscriptionId) VRFConsumerBaseV2Plus(0xDA3b641D438362C440Ac5458c57e00a712b66700) payable {
+    COORDINATOR = IVRFCoordinatorV2Plus(0xDA3b641D438362C440Ac5458c57e00a712b66700);
+    s_subscriptionId = subscriptionId;
+}
+
+    function placeBet(bool _isHead) external payable {
+        require(msg.value > 0, "Amount should be more than 0");
+
+        uint256 requestId = requestRandomWords();
+        bets[requestId] = Bet(msg.value, _isHead);
+        requestIdToPlayer[requestId] = msg.sender;
     
-}
+        emit BetPlaced(msg.sender, msg.value, requestId);
+    }
 
-function flipCoin(address payable _player, uint256 _betAmount) payable public {
-    require(_betAmount > 0, "Bet amount should be more than 0");
-    //uint256 betAmountInWei = _betAmount * weiPerBnb;
-    payable(address(this)).call{value: _betAmount}("");
-    // (bool success, ) = 
-    //require(success, "Tranfer Failed");
-    uint256 requestId = COORDINATOR.requestRandomWords(KEYHASH, SUB, 1, 1, 1);
-    pendingGames[requestId] = _player;
-    bets[requestId] = _betAmount;
-}
+    function requestRandomWords() internal returns (uint256 requestId) {
+        requestId = COORDINATOR.requestRandomWords(
+            VRFV2PlusClient.RandomWordsRequest({
+                keyHash: keyHash,
+                subId: s_subscriptionId,
+                requestConfirmations: requestConfirmations,
+                callbackGasLimit: callbackGasLimit,
+                numWords: numWords,
+                extraArgs: VRFV2PlusClient._argsToBytes(
+                    VRFV2PlusClient.ExtraArgsV1({nativePayment: false})
+                )
+            })
+        );
+    }
 
-function fulfillRandomWords(uint256 requestId, uint256[] memory randomWords) internal override  {
-    address playerAddress = pendingGames[requestId];
-    uint256 betAmount = bets[requestId];
+    function fulfillRandomWords(uint256 _requestId, uint256[] memory _randomWords) internal override {
+        require(bets[_requestId].amount > 0, "Bet not found");
+        Bet memory bet = bets[_requestId];
+        delete bets[_requestId];
 
-    uint256 randomNumber = randomWords[0] % 2;
-    bool isHead = randomNumber == 0; 
-    emit coinFlipOutcome(isHead, address(this));
+        uint256 randomNumber = _randomWords[0] % 2;
+        bool isHead = randomNumber == 0;
+        uint256 feeAmount = bet.amount * 5 / 100;
+        totalFeesCollected += feeAmount;
 
-    ditributeRewards(isHead ? playerAddress : address(this), betAmount);
+        if (isHead == bet.isHead) {
+            uint256 winnings = bet.amount * 2;
+            payable(requestIdToPlayer[_requestId]).transfer(winnings);
+            emit CoinFlipped(requestIdToPlayer[_requestId], "You Won!", winnings);
+        } else {
+            emit CoinFlipped(requestIdToPlayer[_requestId], "You Lost!", bet.amount);
+        }
+    }
 
-    delete pendingGames[requestId];
-}
+    function fund() payable external {
+    }
 
-event coinFlipOutcome(bool isHead, address winner);
-
-function ditributeRewards(address winner, uint256 betAmount) internal {
-    payable(winner).transfer(betAmount * 2);
-}
-
-function withdrawFunds(uint256 _amount) public {
+    function withdrawFunds(uint256 _amount) public {
     require(address(this).balance >= _amount, "insufficent funds");
     payable(msg.sender).transfer(_amount);
 }
-} 
+
+
+
+
+
+}
